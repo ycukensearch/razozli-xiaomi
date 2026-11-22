@@ -1,0 +1,43 @@
+<title>ПРЕДУПРЕЖДЕНИЕ!!! | ИГРА РАЗОЗЛИ ВЛАДЕЛЬЦА XIAOMI</title>
+<h1>ВНИМАНИЕ!!!</h1>
+<p>ЭТА ИГРА СОЗДАНА В РАЗВЛЕКАТЕЛЬНЫХ ЦЕЛЯХ И НЕ ПЫТАЕТСЯ НИКОГО ОСКОРБИТЬ, ЕСЛИ В ВСЁ РАВНО РАССТРОИЛИСЬ, ТО СКАЖУ, ПО СЕКРЕТУ, ЭТА ИГРА ПРО РАННИЕ XIAOMI!</p>
+  <p>Я, как разработчик этой игры уважаю всех людей, я не пытаюсь ни над кем насмехаться! Владелец Xiaomi является вымышленным персонажем!</p>
+  <h1>Нажимая на галочку, вы принимаете написанное вышн предупреждение!</h1>
+  <label>
+  <input type="checkbox" id="agreeCheckbox">
+  Я прочитал предупреждение и хочу перейти дальше
+</label>
+
+<br><br>
+
+<a id="secretLink" href="play.html" class="disabled-link" aria-disabled="true">
+  Играть!
+</a>
+
+<style>
+  .disabled-link {
+    color: #999;
+    pointer-events: none; /* запрещает клики мышью */
+    text-decoration: none;
+    cursor: not-allowed;
+  }
+</style>
+
+<script>
+  const checkbox = document.getElementById('agreeCheckbox');
+  const link = document.getElementById('secretLink');
+
+  function updateLinkState() {
+    if (checkbox.checked) {
+      link.classList.remove('disabled-link');
+      link.removeAttribute('aria-disabled');
+    } else {
+      link.classList.add('disabled-link');
+      link.setAttribute('aria-disabled', 'true');
+    }
+  }
+
+  // Проверяем состояние при загрузке и при каждом клике
+  updateLinkState();
+  checkbox.addEventListener('change', updateLinkState);
+</script>
