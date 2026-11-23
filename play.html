@@ -4,7 +4,601 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Разозли владельца Xiaomi</title>
-   <body>
-    Игра приостановлена, исходный код можно найти на Github Gist: https://gist.github.com/ycukensearch/84cb2175adc24a9448365cb17e468199
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none; /* Отключаем скролл и зум везде */
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            background-color: #222;
+            color: white;
+            overflow: hidden;
+        }
+
+        #app {
+            position: fixed; /* Жестко фиксируем приложение */
+            top: 0; left: 0; right: 0; bottom: 0;
+            display: flex;
+            flex-direction: column;
+            max-width: 600px;
+            margin: 0 auto;
+            background: #333;
+        }
+
+        /* --- ФАЗА 1 (Кликер) --- */
+        #phase-1 {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            width: 100%;
+        }
+
+        #header {
+            flex-shrink: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: #111;
+            padding: 15px;
+            padding-top: max(15px, env(safe-area-inset-top));
+            border-bottom: 2px solid #ff9800;
+            z-index: 10;
+        }
+
+        #score-display { font-size: 20px; font-weight: bold; color: #ff9800; }
+        #skip-btn { background: #444; color: #fff; border: 1px solid #666; padding: 8px 12px; font-size: 14px; border-radius: 5px; cursor: pointer; }
+
+        #center-area {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        #boss-face {
+            width: 170px; height: 170px;
+            background-color: #8a9a5b;
+            border-radius: 50%;
+            display: flex; justify-content: center; align-items: center;
+            font-size: 100px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            transition: background-color 0.2s, transform 0.1s;
+            position: relative; z-index: 2;
+        }
+
+        #face-counter {
+            margin-top: 20px;
+            font-size: 24px; font-weight: bold; color: #fff;
+            text-shadow: 0 0 10px #ff9800; z-index: 2;
+        }
+
+        .angry { animation: shake 0.15s infinite; }
+        @keyframes shake {
+            0% { transform: translate(2px, 2px) rotate(0deg); }
+            25% { transform: translate(-2px, -2px) rotate(-3deg); }
+            50% { transform: translate(-2px, 2px) rotate(3deg); }
+            75% { transform: translate(2px, -2px) rotate(-3deg); }
+            100% { transform: translate(2px, 2px) rotate(0deg); }
+        }
+
+        .floating-text {
+            position: absolute; color: #ff9800; font-weight: bold; font-size: 24px;
+            pointer-events: none; animation: floatUp 0.8s ease-out forwards; z-index: 5;
+        }
+        @keyframes floatUp {
+            0% { opacity: 1; transform: translateY(0) scale(1); }
+            100% { opacity: 0; transform: translateY(-80px) scale(1.5); }
+        }
+
+        #footer {
+            flex-shrink: 0;
+            background-color: #1a1a1a;
+            padding: 15px;
+            padding-bottom: max(15px, env(safe-area-inset-bottom));
+            border-top: 2px solid #ff9800;
+            display: flex; flex-direction: column; gap: 10px;
+            max-height: 45vh; overflow-y: auto; z-index: 10;
+        }
+
+        .insult-btn {
+            width: 100%; padding: 18px; font-size: 18px; font-weight: bold;
+            background-color: #ff5722; color: white; border: none; border-radius: 12px;
+            box-shadow: 0 5px 0 #b33812; cursor: pointer; flex-shrink: 0;
+            display: none; transition: transform 0.1s, box-shadow 0.1s;
+        }
+        .insult-btn:active { transform: translateY(5px); box-shadow: 0 0px 0 #b33812; }
+
+        /* --- ФАЗА 2 (БИТВА С ДЖОЙСТИКОМ) --- */
+        #phase-2 {
+            display: none;
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(to bottom, #87CEEB, #556B2F);
+            overflow: hidden;
+        }
+
+        /* Полоски здоровья */
+        .hp-bar-container {
+            position: absolute; width: 40%; height: 15px;
+            background-color: #444; border: 2px solid #000; border-radius: 5px;
+            top: max(15px, env(safe-area-inset-top)); z-index: 50;
+        }
+        #boss-hp-container { left: 10px; }
+        #player-hp-container { right: 10px; }
+        .hp-bar { height: 100%; border-radius: 3px; transition: width 0.2s; }
+        #boss-hp { background-color: #d32f2f; width: 100%; }
+        #player-hp { background-color: #4caf50; width: 100%; }
+
+        /* Персонажи (позиционируем через transform для плавности) */
+        .entity {
+            position: absolute;
+            display: flex; justify-content: center; align-items: center;
+            transform: translate(-50%, -50%); /* Центрируем по координатам */
+            z-index: 10;
+            transition: none; /* Убираем задержки */
+        }
+
+        #boss-battle {
+            width: 90px; height: 90px;
+            background-color: #b71c1c; border-radius: 50%;
+            font-size: 50px; box-shadow: 0 0 20px rgba(255,0,0,0.8);
+            left: 50%; top: 50px;
+        }
+
+        #player {
+            width: 60px; height: 60px;
+            background-color: #1976d2; border-radius: 50%;
+            font-size: 35px; box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+            left: 50%; top: 80%;
+        }
+
+        .projectile {
+            position: absolute; font-size: 35px; line-height: 1; z-index: 5;
+            transform: translate(-50%, -50%);
+        }
+
+        /* --- ВИРТУАЛЬНЫЙ ДЖОЙСТИК --- */
+        #joystick-zone {
+            position: absolute;
+            bottom: 0; left: 0;
+            width: 50%; height: 40%; /* Зона захвата джойстика */
+            z-index: 100;
+        }
+
+        #joystick-base {
+            position: absolute;
+            bottom: max(30px, env(safe-area-inset-bottom));
+            left: 30px;
+            width: 120px; height: 120px;
+            background: rgba(255, 255, 255, 0.2);
+            border: 3px solid rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+            display: flex; justify-content: center; align-items: center;
+            pointer-events: none; /* База не перехватывает клики */
+        }
+
+        #joystick-knob {
+            width: 60px; height: 60px;
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            transition: transform 0.1s; /* Плавный возврат в центр */
+        }
+
+        /* --- КНОПКА АТАКИ --- */
+        #throw-btn {
+            position: absolute;
+            bottom: max(30px, env(safe-area-inset-bottom));
+            right: 30px;
+            width: 90px; height: 90px;
+            background-color: #ff9800;
+            border: 4px solid #fff;
+            border-radius: 50%;
+            display: flex; justify-content: center; align-items: center;
+            font-size: 45px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+            z-index: 100;
+        }
+        #throw-btn:active { background-color: #e68a00; transform: scale(0.95); }
+
+        /* Экран конца */
+        #game-over-screen {
+            display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9); z-index: 1000;
+            flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="app">
+    <!-- ФАЗА 1 -->
+    <div id="phase-1">
+        <div id="header">
+            <div id="score-display">Кликов: 0 / 5000</div>
+            <button id="skip-btn" onclick="skipToBattle()">Тест битвы</button>
+        </div>
+        <div id="center-area">
+            <div id="boss-face">🧔</div>
+            <div id="face-counter">0 / 5000</div>
+        </div>
+        <div id="footer">
+            <button class="insult-btn" data-unlock="0" data-index="0" style="display: block;" onclick="handleClick(this)">xiaomi какашка!</button>
+        </div>
+    </div>
+
+    <!-- ФАЗА 2 -->
+    <div id="phase-2">
+        <div class="hp-bar-container" id="boss-hp-container"><div class="hp-bar" id="boss-hp"></div></div>
+        <div class="hp-bar-container" id="player-hp-container"><div class="hp-bar" id="player-hp"></div></div>
+
+        <!-- Персонажи -->
+        <div class="entity" id="boss-battle">😡</div>
+        <div class="entity" id="player">🏃</div>
+
+        <!-- Управление -->
+        <div id="joystick-zone"></div>
+        <div id="joystick-base">
+            <div id="joystick-knob"></div>
+        </div>
+        <div id="throw-btn">🍎</div>
+    </div>
+
+    <!-- ЭКРАН КОНЦА -->
+    <div id="game-over-screen">
+        <h1 id="game-over-text" style="color: #ff5722; font-size: 28px; margin-bottom: 20px;">Игра окончена</h1>
+        <button onclick="location.reload()" style="padding: 15px 30px; font-size: 20px; background-color: #4caf50; color: white; border: none; border-radius: 10px; font-weight: bold;">Играть снова</button>
+    </div>
+</div>
+
+<script>
+    // ==========================================
+    // ЛОГИКА ФАЗЫ 1 (КЛИКЕР) - БЕЗ ИЗМЕНЕНИЙ
+    // ==========================================
+    let clicks = 0;
+    const maxClicks = 5000;
+    const scoreDisplay = document.getElementById('score-display');
+    const faceCounter = document.getElementById('face-counter');
+    const bossFace = document.getElementById('boss-face');
+    const footer = document.getElementById('footer');
+
+    const insults = [
+        { text: "xiaomi глючит! айфон работает!", unlock: 100 },
+        { text: "xiaomi греется как печка!", unlock: 300 },
+        { text: "xiaomi тормозит!", unlock: 800 },
+        { text: "батарея садится за час!", unlock: 1500 },
+        { text: "камера - как в старой Nokia!", unlock: 2500 },
+        { text: "Даже Samsung лучше!", unlock: 3500 }
+    ];
+
+    insults.forEach((insult, index) => {
+        const btn = document.createElement('button');
+        btn.className = 'insult-btn';
+        btn.innerText = insult.text;
+        btn.dataset.unlock = insult.unlock;
+        btn.dataset.index = index + 1;
+        btn.onclick = function() { handleClick(this); };
+        footer.appendChild(btn);
+    });
+
+    window.handleClick = function(btn) {
+        if (clicks >= maxClicks) return;
+        let points = (parseInt(btn.dataset.index) + 1) * 5; 
+        clicks += points;
+        if (clicks > maxClicks) clicks = maxClicks;
+        
+        scoreDisplay.innerText = `Кликов: ${clicks} / ${maxClicks}`;
+        faceCounter.innerText = `${clicks} / ${maxClicks}`;
+        updateButtons();
+
+        const floatText = document.createElement('div');
+        floatText.className = 'floating-text';
+        floatText.innerText = `+${points}`;
+        floatText.style.left = `calc(50% + ${Math.random() * 60 - 30}px)`;
+        floatText.style.top = `calc(50% + ${Math.random() * 60 - 30}px)`;
+        document.getElementById('center-area').appendChild(floatText);
+        setTimeout(() => floatText.remove(), 800);
+
+        const angerPercent = clicks / maxClicks;
+        bossFace.style.backgroundColor = `rgb(${138 + (117 * angerPercent)}, ${154 - (100 * angerPercent)}, ${91 - (50 * angerPercent)})`;
+        
+        if (clicks > 100) {
+            bossFace.classList.add('angry');
+            if (clicks > 3000) bossFace.innerText = '😡';
+            else if (clicks > 1500) bossFace.innerText = '😠';
+            else if (clicks > 500) bossFace.innerText = '😤';
+        }
+
+        if (clicks >= maxClicks) startBattle();
+    };
+
+    function updateButtons() {
+        document.querySelectorAll('.insult-btn').forEach(btn => {
+            if (clicks >= parseInt(btn.dataset.unlock)) btn.style.display = 'block';
+        });
+    }
+
+    window.skipToBattle = function() {
+        clicks = maxClicks - 1;
+        handleClick(document.querySelector('.insult-btn[data-index="0"]')); 
+    };
+
+    // ==========================================
+    // ЛОГИКА ФАЗЫ 2 (2D БИТВА С ДЖОЙСТИКОМ)
+    // ==========================================
+    const phase2 = document.getElementById('phase-2');
+    const gameOverScreen = document.getElementById('game-over-screen');
+    const playerEl = document.getElementById('player');
+    const bossEl = document.getElementById('boss-battle');
+    
+    // Координаты и характеристики
+    let player = { x: 0, y: 0, speed: 4, hp: 100, radius: 30 };
+    let boss = { x: 0, y: 0, speed: 2.5, hp: 100, radius: 45, lastThrow: 0 };
+    let projectiles = [];
+    
+    // Переменные для джойстика
+    let joyActive = false;
+    let joyVector = { x: 0, y: 0 };
+    let joyCenter = { x: 0, y: 0 };
+    let joyMaxDist = 40; // Радиус отклонения кнопки
+    
+    let lastTime = 0;
+    let reqId;
+
+    function startBattle() {
+        document.getElementById('phase-1').style.display = 'none';
+        phase2.style.display = 'block';
+        
+        // Начальные позиции (центр экрана)
+        player.x = window.innerWidth / 2;
+        player.y = window.innerHeight - 150;
+        boss.x = window.innerWidth / 2;
+        boss.y = 100;
+        
+        player.hp = 100;
+        boss.hp = 100;
+        projectiles = [];
+        
+        updateBattleUI();
+        updateEntityPos(playerEl, player.x, player.y);
+        updateEntityPos(bossEl, boss.x, boss.y);
+        
+        initJoystick();
+        lastTime = performance.now();
+        reqId = requestAnimationFrame(gameLoop);
+    }
+
+    // Инициализация джойстика
+    const joyZone = document.getElementById('joystick-zone');
+    const joyKnob = document.getElementById('joystick-knob');
+    const joyBase = document.getElementById('joystick-base');
+
+    function initJoystick() {
+        joyZone.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            joyActive = true;
+            
+            // Запоминаем центр базы на экране
+            const rect = joyBase.getBoundingClientRect();
+            joyCenter.x = rect.left + rect.width / 2;
+            joyCenter.y = rect.top + rect.height / 2;
+            
+            updateJoystick(e.clientX, e.clientY);
+        });
+
+        joyZone.addEventListener('pointermove', (e) => {
+            if (!joyActive) return;
+            e.preventDefault();
+            updateJoystick(e.clientX, e.clientY);
+        });
+
+        const endJoy = (e) => {
+            if (!joyActive) return;
+            joyActive = false;
+            joyVector = { x: 0, y: 0 };
+            joyKnob.style.transform = `translate(0px, 0px)`; // Возвращаем в центр
+        };
+
+        joyZone.addEventListener('pointerup', endJoy);
+        joyZone.addEventListener('pointercancel', endJoy);
+    }
+
+    function updateJoystick(touchX, touchY) {
+        let dx = touchX - joyCenter.x;
+        let dy = touchY - joyCenter.y;
+        let dist = Math.sqrt(dx*dx + dy*dy);
+        
+        if (dist > joyMaxDist) {
+            dx = (dx / dist) * joyMaxDist;
+            dy = (dy / dist) * joyMaxDist;
+        }
+        
+        // Визуально двигаем стик
+        joyKnob.style.transform = `translate(${dx}px, ${dy}px)`;
+        
+        // Нормализуем вектор от -1 до 1 для скорости
+        joyVector.x = dx / joyMaxDist;
+        joyVector.y = dy / joyMaxDist;
+    }
+
+    // Кнопка атаки
+    document.getElementById('throw-btn').addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        throwApple();
+    });
+
+    function throwApple() {
+        if (boss.hp <= 0 || player.hp <= 0) return;
+        const apple = document.createElement('div');
+        apple.className = 'projectile';
+        apple.innerText = '🍎';
+        
+        // Позиция
+        apple.style.left = `${player.x}px`;
+        apple.style.top = `${player.y}px`;
+        phase2.appendChild(apple);
+        
+        // Вектор от игрока к боссу (авто-прицел)
+        let dx = boss.x - player.x;
+        let dy = boss.y - player.y;
+        let dist = Math.sqrt(dx*dx + dy*dy);
+        
+        projectiles.push({
+            el: apple, 
+            x: player.x, y: player.y, 
+            vx: (dx / dist) * 10, // Скорость яблока
+            vy: (dy / dist) * 10, 
+            type: 'apple'
+        });
+    }
+
+    function throwBrick() {
+        const brick = document.createElement('div');
+        brick.className = 'projectile';
+        brick.innerText = '🧱';
+        
+        brick.style.left = `${boss.x}px`;
+        brick.style.top = `${boss.y}px`;
+        phase2.appendChild(brick);
+        
+        // Вектор от босса к игроку
+        let dx = player.x - boss.x;
+        let dy = player.y - boss.y;
+        let dist = Math.sqrt(dx*dx + dy*dy);
+        
+        projectiles.push({
+            el: brick, 
+            x: boss.x, y: boss.y, 
+            vx: (dx / dist) * 6, 
+            vy: (dy / dist) * 6, 
+            type: 'brick'
+        });
+    }
+
+    function updateEntityPos(el, x, y) {
+        // Используем translate для лучшей производительности
+        el.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
+        el.style.left = '0';
+        el.style.top = '0';
+    }
+
+    function gameLoop(timestamp) {
+        let dt = (timestamp - lastTime) / 16.66; // Нормализация к 60 FPS
+        if (dt > 2) dt = 2; // Защита от лагов
+        lastTime = timestamp;
+
+        if (player.hp <= 0 || boss.hp <= 0) return endGame();
+
+        // 1. Движение игрока по джойстику
+        player.x += joyVector.x * player.speed * dt * 3;
+        player.y += joyVector.y * player.speed * dt * 3;
+        
+        // Ограничиваем игрока рамками экрана
+        player.x = Math.max(player.radius, Math.min(window.innerWidth - player.radius, player.x));
+        player.y = Math.max(player.radius + 40, Math.min(window.innerHeight - player.radius, player.y)); // +40 чтобы не залезать на хп бар
+        updateEntityPos(playerEl, player.x, player.y);
+
+        // 2. ИИ Босса (Преследование)
+        let dx = player.x - boss.x;
+        let dy = player.y - boss.y;
+        let dist = Math.sqrt(dx*dx + dy*dy);
+        
+        if (dist > 0) {
+            boss.x += (dx / dist) * boss.speed * dt * 2;
+            boss.y += (dy / dist) * boss.speed * dt * 2;
+            updateEntityPos(bossEl, boss.x, boss.y);
+        }
+
+        // Если босс догнал игрока (столкновение)
+        if (dist < player.radius + boss.radius - 10) {
+            player.hp -= 1 * dt; // Постепенный урон, если он наступил
+            updateBattleUI();
+            playerEl.style.backgroundColor = '#ff9999';
+            setTimeout(() => playerEl.style.backgroundColor = '#1976d2', 100);
+        }
+
+        // Босс кидает кирпичи
+        if (timestamp - boss.lastThrow > 1000) {
+            throwBrick();
+            boss.lastThrow = timestamp;
+        }
+
+        // 3. Обработка снарядов (яблоки и кирпичи)
+        for (let i = projectiles.length - 1; i >= 0; i--) {
+            let p = projectiles[i];
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+            p.el.style.transform = `translate(${p.x}px, ${p.y}px) translate(-50%, -50%)`;
+            
+            // Проверка коллизий
+            let hit = false;
+            
+            if (p.type === 'apple') {
+                let bdx = boss.x - p.x;
+                let bdy = boss.y - p.y;
+                if (Math.sqrt(bdx*bdx + bdy*bdy) < boss.radius) {
+                    boss.hp -= 10;
+                    hit = true;
+                    updateBattleUI();
+                    flashBoss();
+                }
+            } else {
+                let pdx = player.x - p.x;
+                let pdy = player.y - p.y;
+                if (Math.sqrt(pdx*pdx + pdy*pdy) < player.radius) {
+                    player.hp -= 15;
+                    hit = true;
+                    updateBattleUI();
+                    flashPlayer();
+                }
+            }
+
+            // Удаление улетевших или попавших снарядов
+            if (hit || p.x < -50 || p.x > window.innerWidth + 50 || p.y < -50 || p.y > window.innerHeight + 50) {
+                p.el.remove();
+                projectiles.splice(i, 1);
+            }
+        }
+
+        reqId = requestAnimationFrame(gameLoop);
+    }
+
+    function flashBoss() {
+        bossEl.style.backgroundColor = '#fff';
+        setTimeout(() => bossEl.style.backgroundColor = '#b71c1c', 100);
+    }
+    function flashPlayer() {
+        playerEl.style.backgroundColor = '#fff';
+        setTimeout(() => playerEl.style.backgroundColor = '#1976d2', 100);
+    }
+
+    function updateBattleUI() {
+        document.getElementById('boss-hp').style.width = `${Math.max(0, boss.hp)}%`;
+        document.getElementById('player-hp').style.width = `${Math.max(0, player.hp)}%`;
+    }
+
+    function endGame() {
+        cancelAnimationFrame(reqId);
+        gameOverScreen.style.display = 'flex';
+        if (boss.hp <= 0) {
+            document.getElementById('game-over-text').innerText = "Победа! 🍎🎉";
+            document.getElementById('game-over-text').style.color = "#4caf50";
+        } else {
+            document.getElementById('game-over-text').innerText = "Хоть ты лопни, хоть ты тресни, Xiaomi всегда на первом месте!";
+            document.getElementById('game-over-text').style.color = "#f44336";
+        }
+    }
+</script>
 </body>
 </html>
